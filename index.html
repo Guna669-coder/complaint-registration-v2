@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Complaint Registry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>
+    </svg>
+    Complaint Registry
+  </a>
+  <div class="nav-links">
+    <a href="index.html" class="active">Submit</a>
+    <a href="admin.html">Admin</a>
+    <a href="agent.html">Agent</a>
+  </div>
+</nav>
+
+<div class="page">
+  <h1 class="page-title">Submit a Complaint</h1>
+  <p class="page-sub">Fill in your details below. You will receive a complaint ID to track your case.</p>
+
+  <div id="toast"></div>
+
+  <div class="card" style="margin-bottom: 2rem;">
+    <div id="submitAlert"></div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="name">Full name</label>
+        <input type="text" id="name" placeholder="e.g. Ravi Kumar" required />
+      </div>
+      <div class="form-group">
+        <label for="email">Email address</label>
+        <input type="email" id="email" placeholder="you@example.com" required />
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="phone">Phone number</label>
+        <input type="tel" id="phone" placeholder="+91 98765 43210" required />
+      </div>
+      <div class="form-group">
+        <label for="complaint">Complaint title</label>
+        <input type="text" id="complaint" placeholder="Brief title of the issue" required />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" placeholder="Describe your complaint in detail..." required></textarea>
+    </div>
+
+    <button class="btn btn-primary" onclick="submitComplaint()" id="submitBtn">
+      Submit complaint
+    </button>
+  </div>
+
+  <!-- Status Checker -->
+  <h2 style="font-size: 17px; font-weight: 600; margin-bottom: 0.5rem;">Track your complaint</h2>
+  <p class="page-sub" style="margin-bottom: 1rem;">Enter the complaint ID you received after submitting.</p>
+
+  <div class="card">
+    <div style="display: flex; gap: 10px; align-items: flex-end;">
+      <div class="form-group" style="flex: 1; margin-bottom: 0;">
+        <label for="statusId">Complaint ID</label>
+        <input type="text" id="statusId" placeholder="e.g. 64f3c..." />
+      </div>
+      <button class="btn btn-outline" onclick="checkStatus()" id="trackBtn" style="margin-bottom: 0;">
+        Track
+      </button>
+    </div>
+
+    <div id="statusResult" style="margin-top: 1rem; display: none;">
+      <hr style="margin-bottom: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div>
+          <p style="font-size: 13px; color: var(--ink-3); margin-bottom: 2px;">Complaint</p>
+          <p id="statusTitle" style="font-weight: 500; font-size: 15px;"></p>
+        </div>
+        <div style="text-align: right;">
+          <p style="font-size: 13px; color: var(--ink-3); margin-bottom: 4px;">Status</p>
+          <span id="statusBadge"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = '/api/complaints';
+
+  function badgeClass(status) {
+    const map = { Pending: 'badge-pending', Assigned: 'badge-assigned', 'In Progress': 'badge-progress', Resolved: 'badge-resolved' };
+    return map[status] || 'badge-pending';
+  }
+
+  async function submitComplaint() {
+    const fields = ['name','email','phone','complaint','description'];
+    const vals = {};
+    for (const f of fields) {
+      vals[f] = document.getElementById(f).value.trim();
+      if (!vals[f]) { showAlert('submitAlert', 'Please fill in all fields.', 'error'); return; }
+    }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vals)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      showAlert('submitAlert',
+        `<strong>Complaint registered!</strong> Your ID: <code style="background:#e7faf3;padding:2px 6px;border-radius:4px;font-size:13px;">${data._id}</code> — save this to track your complaint.`,
+        'success');
+      fields.forEach(f => document.getElementById(f).value = '');
+    } catch (err) {
+      showAlert('submitAlert', 'Could not submit. Please try again.', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = 'Submit complaint';
+    }
+  }
+
+  async function checkStatus() {
+    const id = document.getElementById('statusId').value.trim();
+    if (!id) return;
+
+    const btn = document.getElementById('trackBtn');
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    try {
+      const res = await fetch(`${API}/${id}/status`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      document.getElementById('statusTitle').textContent = data.complaint || 'Complaint';
+      document.getElementById('statusBadge').innerHTML = `<span class="badge ${badgeClass(data.status)}">${data.status}</span>`;
+      document.getElementById('statusResult').style.display = 'block';
+    } catch (err) {
+      document.getElementById('statusResult').style.display = 'none';
+      alert('Complaint not found. Check the ID and try again.');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Track';
+    }
+  }
+
+  function showAlert(id, msg, type) {
+    const el = document.getElementById(id);
+    el.innerHTML = `<div class="alert alert-${type}" style="margin-bottom:1rem;">${msg}</div>`;
+    setTimeout(() => { el.innerHTML = ''; }, 8000);
+  }
+</script>
+
+</body>
+</html>
