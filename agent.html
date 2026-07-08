@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Panel — Complaint Registry</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="index.html">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>
+    </svg>
+    Complaint Registry
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Submit</a>
+    <a href="admin.html">Admin</a>
+    <a href="agent.html" class="active">Agent</a>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- Login section -->
+  <div id="loginSection">
+    <h1 class="page-title">Agent Sign-in</h1>
+    <p class="page-sub">Enter your name to view complaints assigned to you.</p>
+
+    <div class="card" style="max-width:400px;">
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label for="agentName">Your name</label>
+        <input type="text" id="agentName" placeholder="e.g. Priya Sharma" />
+      </div>
+      <button class="btn btn-primary" onclick="loadMyComplaints()" style="width:100%;">
+        View my complaints
+      </button>
+    </div>
+  </div>
+
+  <!-- Agent dashboard (shown after login) -->
+  <div id="dashboard" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+      <div>
+        <h1 class="page-title" id="dashTitle">My Complaints</h1>
+        <p class="page-sub" style="margin-bottom:0;" id="dashSub"></p>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="loadMyComplaints()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 .49-3.51"></path></svg>
+          Refresh
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+
+    <!-- Stats for agent -->
+    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom:1.5rem;">
+      <div class="stat-card"><div class="stat-label">Assigned to me</div><div class="stat-value" id="aTotal">—</div></div>
+      <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value amber" id="aInProgress">—</div></div>
+      <div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value green" id="aResolved">—</div></div>
+    </div>
+
+    <!-- Complaint cards -->
+    <div id="complaintList"></div>
+  </div>
+</div>
+
+<script>
+  const API = '/api/complaints';
+  let agentName = '';
+
+  async function loadMyComplaints() {
+    const nameInput = document.getElementById('agentName').value.trim();
+    if (!nameInput) { document.getElementById('agentName').focus(); return; }
+    agentName = nameInput;
+
+    try {
+      const res = await fetch(`${API}?assignedTo=${encodeURIComponent(agentName)}`);
+      const data = await res.json();
+
+      document.getElementById('loginSection').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      document.getElementById('dashTitle').textContent = `Hello, ${agentName}`;
+      document.getElementById('dashSub').textContent = `${data.length} complaint${data.length !== 1 ? 's' : ''} assigned to you`;
+
+      document.getElementById('aTotal').textContent      = data.length;
+      document.getElementById('aInProgress').textContent = data.filter(c => c.status === 'In Progress').length;
+      document.getElementById('aResolved').textContent   = data.filter(c => c.status === 'Resolved').length;
+
+      renderComplaints(data);
+    } catch (err) {
+      alert('Could not load complaints. Is the server running?');
+    }
+  }
+
+  function signOut() {
+    agentName = '';
+    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('loginSection').style.display = 'block';
+    document.getElementById('agentName').value = '';
+  }
+
+  function badgeClass(status) {
+    const map = { Pending: 'badge-pending', Assigned: 'badge-assigned', 'In Progress': 'badge-progress', Resolved: 'badge-resolved' };
+    return map[status] || 'badge-pending';
+  }
+  function priorityClass(p) {
+    return { High: 'priority-high', Medium: 'priority-medium', Low: 'priority-low' }[p] || 'priority-medium';
+  }
+
+  function renderComplaints(list) {
+    const container = document.getElementById('complaintList');
+
+    if (!list.length) {
+      container.innerHTML = `
+        <div class="card">
+          <div class="empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p>No complaints assigned to you yet.</p>
+          </div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = list.map(c => `
+      <div class="card" style="margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:0;">
+            <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;">
+              <span class="badge ${badgeClass(c.status)}">${c.status}</span>
+              <span class="badge ${priorityClass(c.priority || 'Medium')}">${c.priority || 'Medium'} priority</span>
+            </div>
+            <h3 style="font-size:16px; font-weight:600; margin-bottom:4px;">${c.complaint}</h3>
+            <p style="font-size:13px; color:var(--ink-3); margin-bottom:10px;">
+              From ${c.name} · ${new Date(c.createdAt).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})}
+            </p>
+            <p style="font-size:14px; color:var(--ink-2);">${c.description}</p>
+          </div>
+          <div style="min-width:160px; text-align:right;">
+            <label style="font-size:12px; display:block; margin-bottom:6px;">Update status</label>
+            <select style="width:160px; font-size:13px;" onchange="updateStatus('${c._id}', this.value, this)">
+              <option value="Assigned"    ${c.status==='Assigned'    ? 'selected':''}>Assigned</option>
+              <option value="In Progress" ${c.status==='In Progress' ? 'selected':''}>In Progress</option>
+              <option value="Resolved"    ${c.status==='Resolved'    ? 'selected':''}>Resolved</option>
+            </select>
+          </div>
+        </div>
+
+        <hr style="margin:1rem 0 0.75rem;">
+        <div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
+          <div>
+            <p style="font-size:11px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px;">Email</p>
+            <p style="font-size:13px; color:var(--ink);">${c.email}</p>
+          </div>
+          <div>
+            <p style="font-size:11px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px;">Phone</p>
+            <p style="font-size:13px; color:var(--ink);">${c.phone}</p>
+          </div>
+          <div>
+            <p style="font-size:11px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:2px;">ID</p>
+            <p style="font-size:12px; color:var(--ink-3); font-family:monospace;">${c._id}</p>
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function updateStatus(id, status, selectEl) {
+    const original = selectEl.dataset.original || selectEl.value;
+    selectEl.disabled = true;
+
+    try {
+      const res = await fetch(`${API}/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      if (!res.ok) throw new Error();
+      selectEl.dataset.original = status;
+      // Refresh stats
+      const all = await fetch(`${API}?assignedTo=${encodeURIComponent(agentName)}`).then(r => r.json());
+      document.getElementById('aInProgress').textContent = all.filter(c => c.status === 'In Progress').length;
+      document.getElementById('aResolved').textContent   = all.filter(c => c.status === 'Resolved').length;
+    } catch {
+      selectEl.value = original;
+      alert('Failed to update status. Please try again.');
+    } finally {
+      selectEl.disabled = false;
+    }
+  }
+
+  document.getElementById('agentName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadMyComplaints();
+  });
+</script>
+
+</body>
+</html>
